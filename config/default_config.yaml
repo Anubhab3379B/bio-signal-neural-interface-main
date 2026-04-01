@@ -1,0 +1,200 @@
+# Default configuration for Bio-Signal Interface System
+
+# Bio-Signal Preprocessing Configuration
+preprocessing:
+  # Bandpass filter settings
+  lowcut_freq: 10.0  # Hz - Remove frequencies below this
+  highcut_freq: 200.0  # Hz - Remove frequencies above this
+  
+  # Notch filter settings
+  notch_freq: 50.0  # Hz - Remove power line interference (50 or 60 Hz)
+  quality_factor: 30.0  # Higher = narrower notch
+  
+  # Wavelet denoising settings
+  wavelet_type: 'db4'  # Daubechies 4 wavelet
+  decomposition_level: 3  # Number of decomposition levels
+  
+  # Normalization
+  normalization_method: 'zscore'  # 'zscore' or 'minmax'
+
+# Neuro-Adaptive Control Configuration
+neuro_adaptive:
+  # Network architecture
+  input_size: 15  # Number of input features
+  hidden_size: 64  # Hidden layer neurons
+  output_size: 5  # Number of control outputs
+  
+  # Training parameters
+  learning_rate: 0.001
+  buffer_capacity: 1000  # Replay buffer size
+  replay_ratio: 0.5  # Ratio of replay to new data
+  
+  # Adaptation settings
+  online_epochs: 5  # Epochs for continual learning
+  domain_adaptation_steps: 10
+
+# Sensory Feedback Encoding Configuration
+sensory_feedback:
+  # VAE settings
+  input_dim: 100  # Number of sensors
+  latent_dim: 10  # Compressed dimension
+  vae_learning_rate: 0.001
+  vae_epochs: 20
+  vae_batch_size: 32
+  
+  # Spike encoding settings
+  spike_threshold: 0.3  # Minimum signal for spikes
+  max_spike_rate: 100.0  # Maximum Hz
+  time_step: 0.001  # 1ms resolution
+  
+  # Temperature encoding
+  temp_min: 20.0  # °C
+  temp_max: 45.0  # °C
+
+# Intent Inference Configuration
+intent_inference:
+  # Model settings
+  model_type: 'lstm'  # 'lstm' or 'tcn'
+  input_size: 15  # Features per time step
+  sequence_length: 100  # Time steps
+  num_classes: 5  # Number of intent classes
+  
+  # LSTM settings
+  lstm_hidden_size: 64
+  lstm_num_layers: 2
+  
+  # Training settings
+  learning_rate: 0.001
+  batch_size: 32
+  num_epochs: 10
+
+# Adaptive Control Configuration
+adaptive_control:
+  # PID controller settings
+  kp: 1.0  # Proportional gain
+  ki: 0.1  # Integral gain
+  kd: 0.05  # Derivative gain
+  output_min: -1.0  # Minimum control output
+  output_max: 1.0  # Maximum control output
+  
+  # Neural controller settings
+  state_dim: 4  # [position, velocity, target, error]
+  action_dim: 1  # Control output dimension
+  neural_learning_rate: 0.001
+  
+  # Control mode
+  default_mode: 'pid'  # 'pid', 'neural', or 'blend'
+  
+  # Stability monitoring
+  max_error_threshold: 10.0  # For boundedness check
+  oscillation_threshold: 0.3  # Zero crossing rate
+
+# Data Generation Settings
+data_generation:
+  # EMG signal generation
+  emg_duration: 5.0  # seconds
+  emg_sampling_rate: 1000.0  # Hz
+  emg_noise_level: 0.2
+  
+  # EEG signal generation
+  eeg_duration: 5.0  # seconds
+  eeg_sampling_rate: 256.0  # Hz
+  eeg_noise_level: 0.05
+  
+  # Intent dataset generation
+  intent_n_samples: 500
+  intent_sequence_length: 100
+  intent_n_features: 15
+  intent_n_classes: 5
+
+# Visualization Settings
+visualization:
+  figure_width: 12
+  figure_height: 6
+  line_width: 1
+  grid_alpha: 0.3
+  color_scheme: 'viridis'
+
+# ── NEW: Real-Time Streaming Pipeline ─────────────────────────────────────
+realtime:
+  buffer_capacity: 2048      # Ring buffer max frames
+  window_ms: 200.0           # Preprocessing window size (ms)
+  stride_ms: 50.0            # Inference stride (ms)
+  max_latency_ms: 10.0       # Latency budget per inference cycle
+  poll_interval_ms: 5.0      # Background thread poll rate (ms)
+  sampling_rate: 1000.0      # Default EMG sampling rate (Hz)
+  n_channels: 1              # Default channels for ring buffer
+
+# ── NEW: Transformer Intent Classifier ──────────────────────────────────
+transformer:
+  d_model: 64                # Internal embedding dimension
+  nhead: 4                   # Attention heads (must divide d_model)
+  num_layers: 3              # Transformer encoder stack depth
+  dim_feedforward: 128       # FFN expansion size
+  dropout: 0.1
+  learning_rate: 0.0003      # AdamW lr
+  weight_decay: 0.0001
+  label_smoothing: 0.05      # CrossEntropyLoss smoothing
+
+# ── NEW: Multi-Modal Fusion ──────────────────────────────────────────────
+multimodal:
+  fusion_type: 'attention'   # 'attention' | 'concat' | 'mean'
+  embed_dim: 32              # Shared modality embedding dimension
+  output_dim: 64             # Final fused output dimension
+  dropout: 0.1
+  modalities:
+    emg: 15                  # EMG feature dimension
+    eeg: 10                  # EEG feature dimension
+
+# ── NEW: Uncertainty Quantification ─────────────────────────────────────
+uncertainty:
+  mc_samples: 50             # Monte Carlo dropout forward passes
+  confidence_threshold: 0.70 # Below this → reject / hold current intent
+  ensemble_size: 5           # Number of ensemble members (if used)
+
+# ── NEW: Offshoot Modules ────────────────────────────────────────────────
+eeg_neurofeedback:
+  sampling_rate: 256.0
+  window_sec: 2.0
+  preset: 'focus'            # 'focus' | 'relaxation' | 'fatigue' | 'anxiety'
+  reward_threshold: 0.65
+  alert_threshold: 0.35
+
+gesture_recognition:
+  n_channels: 8
+  window_size: 200
+  sampling_rate: 1000.0
+  confidence_threshold: 0.60
+  n_gestures: 8
+
+user_state_monitor:
+  emg_sampling_rate: 1000.0
+  eeg_sampling_rate: 256.0
+  fatigue_weight: 0.5
+  load_weight: 0.5
+  baseline_secs: 3.0
+
+digital_twin:
+  emg_fs: 1000.0
+  eeg_fs: 256.0
+  apply_artefacts: true
+  default_session_duration: 60.0
+  n_intent_classes: 5
+
+anomaly_detection:
+  sampling_rate: 1000.0
+  clipping_max_val: 1.0
+  clipping_threshold_frac: 0.02
+  clipping_trigger_frac: 0.05
+  dropout_zero_threshold: 0.01
+  dropout_trigger_frac: 0.30
+  power_line_freqs: [50.0, 60.0]
+  power_line_relative_threshold: 10.0
+  motion_lf_cutoff: 5.0
+  noise_burst_z_threshold: 4.0
+
+# ── NEW: Dashboard ───────────────────────────────────────────────────────
+dashboard:
+  host: '0.0.0.0'
+  port: 8000
+  update_hz: 10              # WebSocket broadcast rate
