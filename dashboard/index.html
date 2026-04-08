@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bio-Signal Neural Interface — Real-Time Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg-deep:    #080c14;
+    --bg-card:    #0d1525;
+    --bg-card2:   #111e33;
+    --border:     #1e2f4a;
+    --border-hi:  #2a4a7a;
+    --accent:     #00d4ff;
+    --accent2:    #7c3aed;
+    --green:      #22d3a4;
+    --amber:      #f59e0b;
+    --red:        #ef4444;
+    --text-hi:    #e2eaff;
+    --text-mid:   #8fa5c8;
+    --text-dim:   #4a6080;
+    --glow:       0 0 20px rgba(0,212,255,0.15);
+    --glow-green: 0 0 16px rgba(34,211,164,0.2);
+    --radius:     12px;
+    --font:       'Inter', system-ui, sans-serif;
+    --mono:       'JetBrains Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%; font-family: var(--font); font-size: 13px;
+    background: var(--bg-deep); color: var(--text-hi);
+    overflow-x: hidden;
+  }
+
+  /* ── Grid layout ────────────────────────────────────────────────── */
+  body {
+    display: grid;
+    grid-template-rows: 56px 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "header  header  header"
+      "signal  intent  metric"
+      "eeg     state   anom";
+    gap: 10px;
+    padding: 10px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  header {
+    grid-area: header;
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(135deg, #0d1525, #131f38);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 0 20px;
+    box-shadow: var(--glow);
+  }
+
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.8); }
+  }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+  .logo-text span { color: var(--accent); }
+
+  .status-bar { display: flex; gap: 16px; align-items: center; }
+  .status-pill {
+    padding: 3px 10px; border-radius: 50px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .pill-live  { background: rgba(34,211,164,0.12); color: var(--green);
+                border: 1px solid rgba(34,211,164,0.25); }
+  .pill-state { background: rgba(0,212,255,0.09);   color: var(--accent);
+                border: 1px solid rgba(0,212,255,0.2); }
+
+  .time-display {
+    font-family: var(--mono); font-size: 12px; color: var(--text-mid);
+  }
+
+  /* ── Generic card ────────────────────────────────────────────────── */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    position: relative; overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    opacity: 0.5;
+  }
+  .card:hover { border-color: var(--border-hi); }
+
+  .card-title {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-mid);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .card-icon { width: 16px; height: 16px; opacity: 0.7; }
+
+  /* ── Signal / EMG waveform ────────────────────────────────────────── */
+  #signal  { grid-area: signal; }
+  #canvas-emg { width: 100%; height: 120px; }
+
+  /* ── Intent panel ────────────────────────────────────────────────── */
+  #intent { grid-area: intent; }
+
+  .intent-top {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-card2); border-radius: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-hi);
+  }
+  .intent-name {
+    font-size: 20px; font-weight: 900; letter-spacing: -0.02em;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,212,255,0.4);
+  }
+  .confidence-badge {
+    margin-left: auto;
+    font-family: var(--mono); font-size: 14px; font-weight: 600;
+    color: var(--green);
+  }
+
+  .intent-bars { display: flex; flex-direction: column; gap: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; }
+  .bar-label { width: 62px; font-size: 11px; color: var(--text-mid); text-align: right; }
+  .bar-track {
+    flex: 1; height: 8px; background: rgba(255,255,255,0.04);
+    border-radius: 4px; overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    transition: width 0.3s ease;
+    position: relative;
+  }
+  .bar-fill.top-intent { background: linear-gradient(90deg, #00d4ff, #22d3a4); }
+  .bar-val { width: 38px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+  /* ── System metrics ──────────────────────────────────────────────── */
+  #metric { grid-area: metric; }
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .metric-tile {
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .metric-label { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+  .metric-val {
+    font-family: var(--mono); font-size: 18px; font-weight: 700;
+    color: var(--text-hi);
+  }
+  .metric-val.good  { color: var(--green); }
+  .metric-val.warn  { color: var(--amber); }
+  .metric-val.bad   { color: var(--red); }
+  .metric-unit { font-size: 10px; color: var(--text-dim); margin-left: 3px; }
+
+  /* ── EEG band powers ─────────────────────────────────────────────── */
+  #eeg { grid-area: eeg; }
+  #canvas-eeg { width: 100%; height: 100px; }
+
+  /* ── User state ──────────────────────────────────────────────────── */
+  #state { grid-area: state; }
+  .state-display {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 8px; flex: 1;
+  }
+  .state-ring {
+    width: 100px; height: 100px;
+    border-radius: 50%; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .state-ring-svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+  .state-ring-bg   { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 6; }
+  .state-ring-fill { fill: none; stroke-width: 6; stroke-linecap: round;
+                     transition: stroke-dashoffset 0.5s ease, stroke 0.5s; }
+  .state-val {
+    font-size: 22px; font-weight: 900; position: relative; z-index: 1;
+    transition: color 0.5s;
+  }
+  .state-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; transition: color 0.5s;
+  }
+  .state-indices {
+    display: flex; gap: 16px; margin-top: 4px;
+  }
+  .state-sub { text-align: center; }
+  .state-sub-val { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .state-sub-label { font-size: 10px; color: var(--text-dim); }
+
+  /* ── Anomaly log ──────────────────────────────────────────────────── */
+  #anom { grid-area: anom; }
+  .anom-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+  .anom-entry {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-card2); border-radius: 6px;
+    padding: 6px 10px; animation: slideIn 0.3s ease;
+    border-left: 3px solid;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } }
+  .anom-entry.WARNING  { border-color: var(--amber); }
+  .anom-entry.CRITICAL { border-color: var(--red); }
+  .anom-entry.INFO     { border-color: var(--accent2); }
+  .anom-type  { font-size: 10.5px; font-weight: 700; }
+  .anom-time  { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-left: auto; }
+  .anom-empty { flex: 1; display: flex; align-items: center; justify-content: center;
+                color: var(--text-dim); font-size: 11px; }
+
+  /* ── Glow orb background ─────────────────────────────────────────── */
+  body::before {
+    content: ''; position: fixed; top: -200px; right: -100px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(0,212,255,0.04) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  @media (max-width: 900px) {
+    body {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 56px repeat(3, auto);
+      grid-template-areas:
+        "header  header"
+        "signal  intent"
+        "metric  eeg"
+        "state   anom";
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <div class="logo-text">Bio<span>Signal</span> Neural Interface</div>
+  </div>
+  <div class="status-bar">
+    <div class="status-pill pill-live">● Live</div>
+    <div id="state-pill" class="status-pill pill-state">OPTIMAL</div>
+    <div class="time-display" id="session-time">00:00</div>
+  </div>
+</header>
+
+<!-- ── EMG Waveform ───────────────────────────────────────────────────── -->
+<div class="card" id="signal">
+  <div class="card-title">
+    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+    EMG Raw Signal
+  </div>
+  <canvas id="canvas-emg"></canvas>
+</div>
+
+<!-- ── Intent Classification ─────────────────────────────────────────── -->
+<div class="card" id="intent">
+  <div class="card-title">
+    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+    </svg>
+    Intent Classification
+  </div>
+  <div class="intent-top">
+    <div>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px;">DETECTED INTENT</div>
+      <div class="intent-name" id="top-intent">REST</div>
+    </div>
+    <div class="confidence-badge" id="top-conf">0.00%</div>
+  </div>
+  <div class="intent-bars" id="intent-bars">
+    <!-- populated by JS -->
+  </div>
+</div>
+
+<!-- ── System Metrics ─────────────────────────────────────────────────── -->
+<div class="card" id="metric">
+  <div class="card-title">
+    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+    System Metrics
+  </div>
+  <div class="metric-grid">
+    <div class="metric-tile">
+      <div class="metric-label">Preprocess Latency</div>
+      <div><span class="metric-val good" id="lat-pre">—</span><span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Inference Latency</div>
+      <div><span class="metric-val good" id="lat-inf">—</span><span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">End-to-End Latency</div>
+      <div><span class="metric-val good" id="lat-total">—</span><span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Update Rate</div>
+      <div><span class="metric-val good" id="fps">—</span><span class="metric-unit">Hz</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── EEG Band Powers ────────────────────────────────────────────────── -->
+<div class="card" id="eeg">
+  <div class="card-title">
+    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+    </svg>
+    EEG Band Powers
+  </div>
+  <canvas id="canvas-eeg"></canvas>
+</div>
+
+<!-- ── User State ─────────────────────────────────────────────────────── -->
+<div class="card" id="state">
+  <div class="card-title">
+    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
+    </svg>
+    User State
+  </div>
+  <div class="state-display">
+    <div class="state-ring">
+      <svg class="state-ring-svg" width="100" height="100" viewBox="0 0 100 100">
+        <circle class="state-ring-bg" cx="50" cy="50" r="44"/>
+        <circle class="state-ring-fill" id="ring-fill" cx="50" cy="50" r="44"
+                stroke-dasharray="276.46" stroke-dashoffset="276.46"/>
+      </svg>
+      <div class="state-val" id="stress-pct">0%</div>
+    </div>
+    <div class="state-label" id="state-name">OPTIMAL</div>
+    <div class="state-indices">
+      <div class="state-sub">
+        <div class="state-sub-val" id="fatigue-val" style="color:var(--accent)">0.00</div>
+        <div class="state-sub-label">Fatigue</div>
+      </div>
+      <div class="state-sub">
+        <div class="state-sub-val" id="load-val" style="color:var(--accent2)">0.00</div>
+        <div class="state-sub-label">Cog. Load</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Anomaly Log ─────────────────────────────────────────────────────── -->
+<div class="card" id="anom">
+  <div class="card-title">
+    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    Anomaly Log
+  </div>
+  <div class="anom-log" id="anom-log">
+    <div class="anom-empty">No anomalies detected ✓</div>
+  </div>
+</div>
+
+<script>
+// ── EMG Canvas ────────────────────────────────────────────────────────────
+const emgCanvas = document.getElementById('canvas-emg');
+const emgCtx    = emgCanvas.getContext('2d');
+const emgBuf    = new Array(200).fill(0);
+
+function resizeCanvas(canvas) {
+  canvas.width  = canvas.offsetWidth  * window.devicePixelRatio;
+  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+}
+
+function drawEMG(samples) {
+  resizeCanvas(emgCanvas);
+  const ctx = emgCtx, w = emgCanvas.width, h = emgCanvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    ctx.beginPath(); ctx.moveTo(0, h*i/4); ctx.lineTo(w, h*i/4); ctx.stroke();
+  }
+
+  // Waveform glow
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0,   'rgba(0,212,255,0)');
+  grad.addColorStop(0.1, 'rgba(0,212,255,0.8)');
+  grad.addColorStop(0.9, 'rgba(124,58,237,0.8)');
+  grad.addColorStop(1,   'rgba(124,58,237,0)');
+
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 1.5 * window.devicePixelRatio;
+  ctx.shadowColor = 'rgba(0,212,255,0.4)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  samples.forEach((s, i) => {
+    const x = (i / (samples.length - 1)) * w;
+    const y = h/2 - (s / 2) * h * 0.4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// ── EEG Canvas (bar chart) ────────────────────────────────────────────────
+const eegCanvas  = document.getElementById('canvas-eeg');
+const eegCtx     = eegCanvas.getContext('2d');
+const BAND_COLS  = ['#6366f1','#7c3aed','#00d4ff','#22d3a4','#f59e0b'];
+const BAND_LBLS  = ['δ Delta','θ Theta','α Alpha','β Beta','γ Gamma'];
+let lastBands    = {delta:0.2,theta:0.15,alpha:0.4,beta:0.2,gamma:0.05};
+
+function drawEEG(bands) {
+  resizeCanvas(eegCanvas);
+  const ctx = eegCtx, w = eegCanvas.width, h = eegCanvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const keys = ['delta','theta','alpha','beta','gamma'];
+  const barW  = w / (keys.length * 1.6);
+  const gap   = (w - barW * keys.length) / (keys.length + 1);
+  const maxH  = h * 0.7;
+
+  keys.forEach((k, i) => {
+    const x   = gap + i * (barW + gap);
+    const val = bands[k] || 0;
+    const bh  = val * maxH * 3;
+    const y   = h - bh - 22;
+
+    // Bar gradient
+    const g = ctx.createLinearGradient(0, y + bh, 0, y);
+    g.addColorStop(0, BAND_COLS[i] + '88');
+    g.addColorStop(1, BAND_COLS[i]);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, bh, 4);
+    ctx.fill();
+
+    // Shadow glow
+    ctx.shadowColor = BAND_COLS[i]; ctx.shadowBlur = 10;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Label text
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = `${9 * window.devicePixelRatio}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(BAND_LBLS[i], x + barW/2, h - 6);
+
+    // Value text
+    ctx.fillStyle = BAND_COLS[i];
+    ctx.font = `bold ${9 * window.devicePixelRatio}px JetBrains Mono, monospace`;
+    ctx.fillText((val * 100).toFixed(0) + '%', x + barW/2, y - 4);
+  });
+}
+
+// ── Intent bars ───────────────────────────────────────────────────────────
+const intentBarsEl = document.getElementById('intent-bars');
+const intentNames  = ['REST','GRASP','RELEASE','POINT','PINCH'];
+let intentBarEls   = {};
+
+function initIntentBars() {
+  intentNames.forEach(name => {
+    const row = document.createElement('div'); row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="bar-label">${name}</div>
+      <div class="bar-track"><div class="bar-fill" id="bar-${name}" style="width:0%"></div></div>
+      <div class="bar-val" id="barval-${name}">0.00</div>`;
+    intentBarsEl.appendChild(row);
+    intentBarEls[name] = row.querySelector(`#bar-${name}`);
+  });
+}
+initIntentBars();
+
+function updateIntentBars(probs, topIntent) {
+  intentNames.forEach(name => {
+    const p = (probs[name] || 0) * 100;
+    const el = intentBarEls[name];
+    el.style.width = p.toFixed(1) + '%';
+    el.className   = 'bar-fill' + (name === topIntent ? ' top-intent' : '');
+    const valEl = document.getElementById('barval-' + name);
+    if (valEl) valEl.textContent = (probs[name] || 0).toFixed(2);
+  });
+}
+
+// ── State ring ────────────────────────────────────────────────────────────
+const ringFill    = document.getElementById('ring-fill');
+const CIRC        = 2 * Math.PI * 44;
+const STATE_COLS  = {OPTIMAL:'#22d3a4',MILD_LOAD:'#00d4ff',FATIGUED:'#f59e0b',
+                     OVERLOADED:'#f97316',CRITICAL:'#ef4444'};
+
+function updateStateRing(stress, stateName) {
+  const offset = CIRC * (1 - stress);
+  ringFill.style.strokeDashoffset = offset;
+  const col = STATE_COLS[stateName] || '#22d3a4';
+  ringFill.style.stroke = col;
+  document.getElementById('stress-pct').style.color = col;
+  document.getElementById('stress-pct').textContent  = Math.round(stress * 100) + '%';
+  document.getElementById('state-name').textContent  = stateName;
+  document.getElementById('state-name').style.color  = col;
+  document.getElementById('state-pill').textContent  = stateName;
+}
+
+// ── Anomaly log ───────────────────────────────────────────────────────────
+const anomLog = document.getElementById('anom-log');
+const anomSev = { MOTION_ARTIFACT:'WARNING', NOISE_BURST:'INFO', POWER_LINE:'WARNING',
+                  CLIPPING:'CRITICAL', DROPOUT:'CRITICAL', FLAT_LINE:'CRITICAL' };
+let anomCount = 0;
+
+function addAnomaly(type, ts) {
+  if (anomCount === 0) anomLog.innerHTML = '';
+  anomCount++;
+
+  const sev = anomSev[type] || 'INFO';
+  const sevColor = {'WARNING':'var(--amber)','CRITICAL':'var(--red)','INFO':'#a78bfa'}[sev];
+  const entry = document.createElement('div');
+  entry.className = `anom-entry ${sev}`;
+  entry.innerHTML = `
+    <div class="anom-type" style="color:${sevColor}">${type.replace('_',' ')}</div>
+    <div class="anom-time">${ts.toFixed(1)}s</div>`;
+  anomLog.prepend(entry);
+
+  // Keep only 10 entries
+  while (anomLog.children.length > 10) {
+    anomLog.removeChild(anomLog.lastChild);
+  }
+}
+
+// ── Latency colouring ─────────────────────────────────────────────────────
+function setLatEl(id, val) {
+  const el = document.getElementById(id);
+  el.textContent = val.toFixed(1);
+  el.className = 'metric-val ' + (val < 5 ? 'good' : val < 10 ? 'warn' : 'bad');
+}
+
+// ── Session timer ─────────────────────────────────────────────────────────
+const sessionStart = Date.now();
+setInterval(() => {
+  const s = Math.floor((Date.now() - sessionStart) / 1000);
+  const m = Math.floor(s / 60).toString().padStart(2, '0');
+  const ss = (s % 60).toString().padStart(2, '0');
+  document.getElementById('session-time').textContent = m + ':' + ss;
+}, 1000);
+
+// ── FPS counter ───────────────────────────────────────────────────────────
+let fpsFrames = 0, fpsLast = Date.now();
+function updateFPS() {
+  fpsFrames++;
+  const now = Date.now();
+  if (now - fpsLast >= 1000) {
+    document.getElementById('fps').textContent = fpsFrames;
+    fpsFrames = 0; fpsLast = now;
+  }
+}
+
+// ── WebSocket connection ──────────────────────────────────────────────────
+let ws, reconnectTimer;
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onmessage = (evt) => {
+    updateFPS();
+    try {
+      const d = JSON.parse(evt.data);
+
+      // EMG waveform
+      if (d.emg_raw) {
+        emgBuf.push(...d.emg_raw);
+        emgBuf.splice(0, d.emg_raw.length);
+        drawEMG(emgBuf);
+      }
+
+      // EEG bands
+      if (d.eeg_bands) {
+        lastBands = d.eeg_bands;
+        drawEEG(lastBands);
+      }
+
+      // Intent bars
+      if (d.intent_probs) {
+        updateIntentBars(d.intent_probs, d.top_intent);
+        document.getElementById('top-intent').textContent = d.top_intent || '—';
+        document.getElementById('top-conf').textContent =
+          ((d.confidence || 0) * 100).toFixed(1) + '%';
+      }
+
+      // Latency
+      if (d.latency) {
+        setLatEl('lat-pre',   d.latency.preprocess_ms);
+        setLatEl('lat-inf',   d.latency.inference_ms);
+        setLatEl('lat-total', d.latency.total_ms);
+      }
+
+      // User state
+      if (d.stress !== undefined) {
+        updateStateRing(d.stress, d.user_state);
+        // Simulate fatigue / cog load indices
+        document.getElementById('fatigue-val').textContent =
+          (d.stress * 0.7).toFixed(2);
+        document.getElementById('load-val').textContent   =
+          (d.stress * 0.6 + 0.1 * Math.random()).toFixed(2);
+      }
+
+      // Anomaly
+      if (d.anomaly) addAnomaly(d.anomaly, d.ts);
+
+    } catch(e) { console.warn('Parse error', e); }
+  };
+
+  ws.onclose = () => {
+    reconnectTimer = setTimeout(connect, 2000);
+    document.getElementById('fps').textContent = '—';
+  };
+  ws.onerror = () => ws.close();
+}
+
+connect();
+window.addEventListener('resize', () => { drawEMG(emgBuf); drawEEG(lastBands); });
+</script>
+</body>
+</html>
