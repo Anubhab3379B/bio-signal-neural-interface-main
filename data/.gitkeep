@@ -1,0 +1,5 @@
+# Create empty directories that don't have files yet
+# This ensures the complete project structure exists
+
+# Note: This is a placeholder file
+# Python's .gitkeep convention - ensures empty directories are tracked
